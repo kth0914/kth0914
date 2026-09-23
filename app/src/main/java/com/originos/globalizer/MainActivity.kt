@@ -92,7 +92,7 @@ private fun GlobalizerApp(shell: ShizukuShell) {
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("OriginOS Globalizer v0.2.0") }) }
+        topBar = { TopAppBar(title = { Text("OriginOS Globalizer v0.2.1") }) }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -167,6 +167,58 @@ private fun GlobalizerApp(shell: ShizukuShell) {
                 }
             ) {
                 Text(if (diagnosticBusy) "診斷中…" else "執行 Google 深度診斷")
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    modifier = Modifier.weight(1f),
+                    enabled = shizukuGranted && !busy && !diagnosticBusy,
+                    onClick = {
+                        busy = true
+                        message = null
+                        shell.ensureConnected()
+                        scope.launch {
+                            delay(300)
+                            val result = withContext(Dispatchers.IO) {
+                                healthChecker.showAssistantSession()
+                            }
+                            message = result.fold({ it }, { "測試失敗：${it.message}" })
+                            busy = false
+                        }
+                    }
+                ) {
+                    Text("測試喚起 Assistant")
+                }
+
+                OutlinedButton(
+                    modifier = Modifier.weight(1f),
+                    enabled = shizukuGranted && !busy && !diagnosticBusy,
+                    onClick = {
+                        busy = true
+                        message = null
+                        shell.ensureConnected()
+                        scope.launch {
+                            delay(300)
+                            val restart = withContext(Dispatchers.IO) {
+                                healthChecker.restartHotwordDetection()
+                            }
+                            if (restart.isSuccess) {
+                                delay(1200)
+                                val recheck = withContext(Dispatchers.IO) {
+                                    healthChecker.collect()
+                                }
+                                health = recheck.getOrNull() ?: health
+                            }
+                            message = restart.fold({ it }, { "重啟失敗：${it.message}" })
+                            busy = false
+                        }
+                    }
+                ) {
+                    Text("重啟 Hotword")
+                }
             }
 
             health?.let { h ->
@@ -258,7 +310,7 @@ private fun GlobalizerApp(shell: ShizukuShell) {
             }
 
             Text(
-                "v0.2.0 原則：先診斷、後修改。不 Root、不改 /system、不碰 Verified Boot；Hey Google / hotword 本版只判斷軟體層條件，不會直接改寫 OEM hotword 設定。",
+                "v0.2.1 原則：先診斷、後修改。可安全測試 Assistant session 與重新啟動 Hotword Detection Service；不 Root、不改 /system、不碰 Verified Boot；Hey Google / hotword 本版只判斷軟體層條件，不會直接改寫 OEM hotword 設定。",
                 style = MaterialTheme.typography.bodySmall
             )
             Spacer(Modifier.height(24.dp))
