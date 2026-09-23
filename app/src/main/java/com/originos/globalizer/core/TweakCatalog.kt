@@ -38,22 +38,28 @@ object TweakCatalog {
         Tweak(
             id = "disable-vivo-browser",
             title = "停用 vivo 瀏覽器",
-            description = "停用中國版 vivo Browser；可隨時恢復。",
+            description = "先嘗試標準 disable-user；若 X Fold5 的 OriginOS 拒絕，改用可逆的 App 暫停模式。",
             risk = Risk.MEDIUM,
-            readCommand = "pm list packages -d | grep -F 'com.vivo.browser' || true",
+            readCommand = "pm list packages -d com.vivo.browser | grep -F 'com.vivo.browser' || true",
             applyCommand = "pm disable-user --user 0 com.vivo.browser",
             restoreTemplate = "pm enable --user 0 com.vivo.browser",
-            restorePolicy = RestorePolicy.ONLY_IF_OLD_EMPTY
+            restorePolicy = RestorePolicy.ONLY_IF_OLD_EMPTY,
+            fallbackApplyCommand = "pm suspend --user 0 com.vivo.browser",
+            fallbackRestoreTemplate = "pm unsuspend --user 0 com.vivo.browser",
+            fallbackLabel = "App 暫停模式"
         ),
         Tweak(
             id = "disable-vivo-appstore",
             title = "停用 vivo 應用商店",
-            description = "只建議已完全改用 Google Play 的使用者。",
+            description = "先嘗試標準 disable-user；若 OriginOS 保護應用商店，改用可逆的 App 暫停模式。",
             risk = Risk.MEDIUM,
-            readCommand = "pm list packages -d | grep -F 'com.vivo.appstore' || true",
+            readCommand = "pm list packages -d com.vivo.appstore | grep -F 'com.vivo.appstore' || true",
             applyCommand = "pm disable-user --user 0 com.vivo.appstore",
             restoreTemplate = "pm enable --user 0 com.vivo.appstore",
-            restorePolicy = RestorePolicy.ONLY_IF_OLD_EMPTY
+            restorePolicy = RestorePolicy.ONLY_IF_OLD_EMPTY,
+            fallbackApplyCommand = "pm suspend --user 0 com.vivo.appstore",
+            fallbackRestoreTemplate = "pm unsuspend --user 0 com.vivo.appstore",
+            fallbackLabel = "App 暫停模式"
         )
     )
 }
