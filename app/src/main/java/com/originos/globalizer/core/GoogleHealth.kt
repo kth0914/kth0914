@@ -106,18 +106,32 @@ class GoogleHealth(private val shell: ShizukuShell) {
             if (googleAppPath.contains("package:")) "Google App 已安裝" else "Google App 未安裝或不可見"
         )
 
-        val googleSystemApp = run(
-            "Google app system flag",
-            "pm list packages -s com.google.android.googlequicksearchbox 2>&1 || true"
+        val googlePackageFlags = run(
+            "Google app package flags",
+            "dumpsys package com.google.android.googlequicksearchbox 2>/dev/null | " +
+                "grep -m 4 -E 'pkgFlags=|privatePkgFlags=' || true"
         )
-        val isGoogleSystemApp = googleSystemApp.contains("com.google.android.googlequicksearchbox")
+        val isGoogleSystemApp =
+            googlePackageFlags.contains("SYSTEM", true)
+        val isGooglePrivilegedApp =
+            googlePackageFlags.contains("PRIVILEGED", true)
+
         items += GoogleDiagnosticItem(
             "Google App 安裝層級",
-            if (isGoogleSystemApp) Status.OK else Status.WARNING,
-            if (isGoogleSystemApp) {
-                "Google App 具有 system app 標記"
-            } else {
-                "Google App 不是 system app。若 hotword 權限屬 signature/privileged，單靠使用者安裝版本通常拿不到。"
+            when {
+                isGooglePrivilegedApp -> Status.OK
+                isGoogleSystemApp -> Status.WARNING
+                else -> Status.WARNING
+            },
+            when {
+                isGooglePrivilegedApp ->
+                    "Google App 具有 privileged/system 級標記。"
+                isGoogleSystemApp ->
+                    "Google App 有 SYSTEM 標記，但目前沒看到 PRIVILEGED 標記。"
+                googlePackageFlags.isBlank() ->
+                    "無法從 dumpsys 判斷 Google App 的 system/privileged 標記。"
+                else ->
+                    "目前沒看到 Google App 的 SYSTEM / PRIVILEGED 標記；這會限制 internal/preinstalled 與 privileged hotword 權限。"
             }
         )
 
@@ -305,7 +319,7 @@ class GoogleHealth(private val shell: ShizukuShell) {
         val soundTriggerSummary = run(
             "SoundTrigger ownership summary",
             "dumpsys soundtrigger_middleware 2>/dev/null | " +
-                "grep -E 'Properties\\\\{|maxSoundModels|client: Identity|ACTIVE|PhraseSoundModel|text:|com\\\\.vivo\\\\.voicewakeup|com\\\\.google\\\\.android\\\\.googlequicksearchbox' | head -n 220 || true"
+                "grep -E 'Properties|maxSoundModels|client: Identity|ACTIVE|PhraseSoundModel|text:|com\\.vivo\\.voicewakeup|com\\.google\\.android\\.googlequicksearchbox' | head -n 220 || true"
         )
 
         val vivoHardwareModelActive =
@@ -342,16 +356,22 @@ class GoogleHealth(private val shell: ShizukuShell) {
         )
 
         val likelyPrivilegedPermissionBlock =
-            !isGoogleSystemApp &&
-                privilegedGrantedCount == 0 &&
+            privilegedGrantedCount == 0 &&
                 recordAudioGranted &&
                 noHotwordConnection &&
                 !googleHardwareSession
+
+        val noRootAlwaysOnUnavailable =
+            !manageHotwordGranted &&
+                !captureHotwordGranted &&
+                !manageKeyphrasesGranted &&
+                noHotwordConnection
 
         items += GoogleDiagnosticItem(
             "Hey Google / OK Google 綜合判斷",
             when {
                 !assistantIsGoogle || !voiceIsGoogle -> Status.WARNING
+                noRootAlwaysOnUnavailable -> Status.WARNING
                 likelyPrivilegedPermissionBlock -> Status.WARNING
                 noHotwordConnection -> Status.WARNING
                 googleHardwareSession -> Status.OK
@@ -360,8 +380,10 @@ class GoogleHealth(private val shell: ShizukuShell) {
             when {
                 !assistantIsGoogle || !voiceIsGoogle ->
                     "Google 尚未完全接管 Assistant framework。"
+                noRootAlwaysOnUnavailable ->
+                    "目前 ROM 沒有授予 Google MANAGE_HOTWORD_DETECTION / CAPTURE_AUDIO_HOTWORD / MANAGE_VOICE_KEYPHRASES，且沒有 active detector connection。一般 Shizuku/shell 無法把這些 internal、preinstalled、signature 或 privileged 權限變成可用，因此 no-root 的 always-on Hey Google 在目前 ROM 上不可行。一般 ACTION_ASSIST / 手勢喚起仍可正常使用。"
                 likelyPrivilegedPermissionBlock ->
-                    "Google 已是預設 Assistant，也有麥克風權限，但 Google App 不是 system app、Hotword privileged permissions 未授權，且沒有建立 detector / hardware session。這非常像陸版 ROM 缺少系統級 hotword 授權，而不是一般設定問題。"
+                    "Google 已是預設 Assistant，也有麥克風權限，但 Hotword privileged permissions 未授權，且沒有建立 detector / hardware session。這是 ROM 系統級授權問題，不是一般設定問題。"
                 noHotwordConnection ->
                     "Google Hotword service 已存在，但 detector connection 尚未建立；先到 Google Voice Match / Hotword 設定完成啟用與語音模型註冊。"
                 googleHardwareSession ->
@@ -377,6 +399,7 @@ class GoogleHealth(private val shell: ShizukuShell) {
             .append("voice_recognition_service=").append(voiceRecognition).append('\n')
             .append("assistant_role=").append(assistantRole).append('\n')
             .append("google_system_app=").append(isGoogleSystemApp).append('\n')
+            .append("google_privileged_app=").append(isGooglePrivilegedApp).append('\n')
             .append("voiceinteraction_filtered=").append(voiceDump).append('\n')
             .append("hotword_state_filtered=").append(hotwordState).append('\n')
             .append("soundtrigger_services=").append(soundTriggerServices).append('\n')
