@@ -34,6 +34,10 @@ object TweakCatalog {
         )
     )
 
+    private val appStoreResolve =
+        "pkg=\$(pm list packages | sed -n 's/^package://p' | grep -E '^(com\\.bbk\\.appstore|com\\.vivo\\.appstore)$' | head -n 1); " +
+        "[ -n \"\$pkg\" ] || { echo 'Vivo App Store package not found'; exit 44; }; "
+
     val debloat = listOf(
         Tweak(
             id = "disable-vivo-browser",
@@ -51,16 +55,16 @@ object TweakCatalog {
         ),
         Tweak(
             id = "disable-vivo-appstore",
-            title = "vivo 應用商店（停用／限制）",
-            description = "先嘗試完整停用；若 OriginOS 將 App Store 設為 root-only，改限制背景執行並立即停止程序。",
+            title = "vivo 應用商店（自動偵測／限制）",
+            description = "自動偵測 vivo/BBK 應用商店實際套件名；先嘗試完整停用，若 OriginOS root-only 保護拒絕，再限制背景執行並立即停止程序。",
             risk = Risk.MEDIUM,
-            readCommand = "pm list packages -d com.vivo.appstore | grep -F 'com.vivo.appstore' || true",
-            applyCommand = "pm disable-user --user 0 com.vivo.appstore",
-            restoreTemplate = "pm enable --user 0 com.vivo.appstore",
+            readCommand = appStoreResolve + "pm list packages -d \"\$pkg\" | grep -F \"\$pkg\" || true",
+            applyCommand = appStoreResolve + "pm disable-user --user 0 \"\$pkg\"",
+            restoreTemplate = appStoreResolve + "pm enable --user 0 \"\$pkg\"",
             restorePolicy = RestorePolicy.ONLY_IF_OLD_EMPTY,
-            fallbackReadCommand = "for op in RUN_IN_BACKGROUND RUN_ANY_IN_BACKGROUND; do v=\$(cmd appops get com.vivo.appstore \$op 2>/dev/null | grep \"\$op:\" | head -n 1 | cut -d: -f2 | cut -d';' -f1 | tr -d ' '); [ -n \"\$v\" ] || v=default; echo \"\$op=\$v\"; done",
-            fallbackApplyCommand = "cmd appops set com.vivo.appstore RUN_IN_BACKGROUND ignore && cmd appops set com.vivo.appstore RUN_ANY_IN_BACKGROUND ignore && am force-stop --user 0 com.vivo.appstore",
-            fallbackRestoreTemplate = "cmd appops set com.vivo.appstore RUN_IN_BACKGROUND {{RUN_IN_BACKGROUND}} && cmd appops set com.vivo.appstore RUN_ANY_IN_BACKGROUND {{RUN_ANY_IN_BACKGROUND}}",
+            fallbackReadCommand = appStoreResolve + "for op in RUN_IN_BACKGROUND RUN_ANY_IN_BACKGROUND; do v=\$(cmd appops get \"\$pkg\" \$op 2>/dev/null | grep \"\$op:\" | head -n 1 | cut -d: -f2 | cut -d';' -f1 | tr -d ' '); [ -n \"\$v\" ] || v=default; echo \"\$op=\$v\"; done",
+            fallbackApplyCommand = appStoreResolve + "cmd appops set \"\$pkg\" RUN_IN_BACKGROUND ignore && cmd appops set \"\$pkg\" RUN_ANY_IN_BACKGROUND ignore && am force-stop --user 0 \"\$pkg\"",
+            fallbackRestoreTemplate = appStoreResolve + "cmd appops set \"\$pkg\" RUN_IN_BACKGROUND {{RUN_IN_BACKGROUND}} && cmd appops set \"\$pkg\" RUN_ANY_IN_BACKGROUND {{RUN_ANY_IN_BACKGROUND}}",
             fallbackLabel = "背景限制模式"
         )
     )
