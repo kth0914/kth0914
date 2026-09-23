@@ -13,13 +13,47 @@ class TweakEngine(
 
         for (tweak in tweaks) {
             val old = shell.exec(tweak.readCommand)
-            entries += SnapshotEntry(tweak.id, old.output.trim(), System.currentTimeMillis())
-            val result = shell.exec(tweak.applyCommand)
-            check(result.ok) { "${tweak.title} 失敗: ${result.output}" }
-            log.append("✓ ").append(tweak.title).append('\n')
+            val primary = shell.exec(tweak.applyCommand)
+
+            val appliedMode = if (primary.ok) {
+                "primary"
+            } else {
+                val fallbackCommand = tweak.fallbackApplyCommand
+                    ?: error(
+                        "${tweak.title} 失敗\n\n系統回傳：\n${primary.diagnostic()}"
+                    )
+
+                val fallback = shell.exec(fallbackCommand)
+                if (!fallback.ok) {
+                    error(
+                        "${tweak.title} 失敗\n\n" +
+                            "標準停用：\n${primary.diagnostic()}\n\n" +
+                            "${tweak.fallbackLabel}：\n${fallback.diagnostic()}"
+                    )
+                }
+
+                log.append("⚠ ")
+                    .append(tweak.title)
+                    .append("：OriginOS 拒絕標準停用，已改用")
+                    .append(tweak.fallbackLabel)
+                    .append('\n')
+                "fallback"
+            }
+
+            entries += SnapshotEntry(
+                tweakId = tweak.id,
+                oldValue = old.output.trim(),
+                timestamp = System.currentTimeMillis(),
+                appliedMode = appliedMode
+            )
+
+            snapshots.save(entries)
+
+            if (appliedMode == "primary") {
+                log.append("✓ ").append(tweak.title).append('\n')
+            }
         }
 
-        snapshots.save(entries)
         log.toString().trim()
     }
 
@@ -31,19 +65,30 @@ class TweakEngine(
 
         val log = StringBuilder()
         tweaks.filter { it.id in snapshotMap }.asReversed().forEach { tweak ->
-            val old = snapshotMap.getValue(tweak.id).oldValue
+            val entry = snapshotMap.getValue(tweak.id)
+            val old = entry.oldValue
             val shouldRestore = when (tweak.restorePolicy) {
                 RestorePolicy.ALWAYS -> true
                 RestorePolicy.ONLY_IF_OLD_EMPTY -> old.isBlank()
             }
+
             if (shouldRestore) {
-                val result = shell.exec(tweak.restoreTemplate)
-                check(result.ok) { "復原 ${tweak.title} 失敗: ${result.output}" }
+                val command = if (entry.appliedMode == "fallback") {
+                    tweak.fallbackRestoreTemplate ?: tweak.restoreTemplate
+                } else {
+                    tweak.restoreTemplate
+                }
+
+                val result = shell.exec(command)
+                check(result.ok) {
+                    "復原 ${tweak.title} 失敗\n\n系統回傳：\n${result.diagnostic()}"
+                }
                 log.append("↩ ").append(tweak.title).append('\n')
             } else {
-                log.append("＝ ").append(tweak.title).append("（原本即為此狀態）\n")
+                log.append("＝ ").append(tweak.title).append("（修改前就已是此狀態）\n")
             }
         }
+
         snapshots.clear()
         log.toString().trim()
     }
