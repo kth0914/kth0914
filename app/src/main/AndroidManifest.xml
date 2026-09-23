@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
+
+    <queries>
+        <package android:name="com.google.android.gms" />
+        <package android:name="com.google.android.gsf" />
+        <package android:name="com.android.vending" />
+        <package android:name="com.google.android.googlequicksearchbox" />
+        <package android:name="com.google.android.apps.bard" />
+        <package android:name="com.google.android.apps.maps" />
+        <package android:name="com.google.android.projection.gearhead" />
+        <package android:name="com.google.android.apps.walletnfcrel" />
+        <package android:name="com.google.android.syncadapters.contacts" />
+        <package android:name="com.google.android.syncadapters.calendar" />
+        <package android:name="com.vivo.appstore" />
+        <package android:name="com.vivo.browser" />
+        <package android:name="com.vivo.game" />
+    </queries>
+
+    <application
+        android:allowBackup="true"
+        android:label="OriginOS Globalizer"
+        android:theme="@style/Theme.OriginOSGlobalizer">
+
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
