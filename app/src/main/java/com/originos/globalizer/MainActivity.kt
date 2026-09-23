@@ -68,7 +68,7 @@ private fun GlobalizerApp(shell: ShizukuShell) {
             shizukuGranted = result == 0
             if (shizukuGranted) shell.ensureConnected()
         }
-        Shizuku.addBinderReceivedListener(binderListener, true)
+        Shizuku.addBinderReceivedListenerSticky(binderListener)
         Shizuku.addRequestPermissionResultListener(permissionListener)
         onDispose {
             Shizuku.removeBinderReceivedListener(binderListener)
