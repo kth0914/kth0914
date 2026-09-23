@@ -85,7 +85,7 @@ private fun GlobalizerApp(shell: ShizukuShell) {
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("OriginOS Globalizer v0.1.2") }) }
+        topBar = { TopAppBar(title = { Text("OriginOS Globalizer v0.1.3") }) }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -180,7 +180,7 @@ private fun GlobalizerApp(shell: ShizukuShell) {
             }
 
             Text(
-                "v0.1.2 原則：不 Root、不改 /system、不碰 Verified Boot。vivo 對部分自家套件採 root-only 保護時，本 App 只做可逆背景限制，不宣稱完整停用。Hey Google / hotword 尚不在本版強改。",
+                "v0.1.3 原則：不 Root、不改 /system、不碰 Verified Boot。vivo 對部分自家套件採 root-only 保護時，本 App 只做可逆背景限制，不宣稱完整停用。Hey Google / hotword 尚不在本版強改。",
                 style = MaterialTheme.typography.bodySmall
             )
             Spacer(Modifier.height(24.dp))
