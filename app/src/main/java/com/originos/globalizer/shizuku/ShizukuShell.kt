@@ -62,5 +62,22 @@ class ShizukuShell {
 }
 
 data class ShellResult(val exitCode: Int, val output: String) {
-    val ok: Boolean get() = exitCode == 0
+    val ok: Boolean
+        get() {
+            if (exitCode != 0) return false
+            val bad = listOf(
+                "Failure",
+                "SecurityException",
+                "Exception occurred",
+                "not allowed",
+                "Unknown package",
+                "Error:"
+            )
+            return bad.none { output.contains(it, ignoreCase = true) }
+        }
+
+    fun diagnostic(): String {
+        val clean = output.trim().ifBlank { "(無輸出)" }
+        return "exit=$exitCode\n$clean"
+    }
 }
