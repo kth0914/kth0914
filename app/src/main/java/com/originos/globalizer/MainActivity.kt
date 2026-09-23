@@ -1,6 +1,8 @@
 package com.originos.globalizer
 
 import android.os.Bundle
+import android.content.Intent
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
@@ -91,8 +93,42 @@ private fun GlobalizerApp(shell: ShizukuShell) {
         shellConnected = shell.isConnected()
     }
 
+    fun launchDefaultAssistant() {
+        val result = runCatching {
+            val intent = Intent(Intent.ACTION_ASSIST).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        }
+        message = result.fold(
+            { "已透過 Android ACTION_ASSIST 呼叫預設數位助理。若跳出 Google / Gemini，代表一般 Assistant 啟動路徑正常。" },
+            { "無法透過 ACTION_ASSIST 啟動助理：${it.message}" }
+        )
+    }
+
+    fun openGoogleHotwordSettings() {
+        val googleIntent = Intent("com.google.android.googlequicksearchbox.action.HOTWORD_DETECTION_SETTINGS").apply {
+            setPackage("com.google.android.googlequicksearchbox")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+
+        val result = runCatching {
+            context.startActivity(googleIntent)
+        }.recoverCatching {
+            val fallback = Intent(Settings.ACTION_VOICE_INPUT_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(fallback)
+        }
+
+        message = result.fold(
+            { "已開啟 Google Hotword / Voice Match 設定；若 Google 專用頁不存在，會退回 Android 語音輸入設定。" },
+            { "找不到可開啟的 Hotword / Voice Match 設定頁：${it.message}" }
+        )
+    }
+
     Scaffold(
-        topBar = { TopAppBar(title = { Text("OriginOS Globalizer v0.2.1") }) }
+        topBar = { TopAppBar(title = { Text("OriginOS Globalizer v0.2.2") }) }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -175,50 +211,46 @@ private fun GlobalizerApp(shell: ShizukuShell) {
             ) {
                 OutlinedButton(
                     modifier = Modifier.weight(1f),
-                    enabled = shizukuGranted && !busy && !diagnosticBusy,
-                    onClick = {
-                        busy = true
-                        message = null
-                        shell.ensureConnected()
-                        scope.launch {
-                            delay(300)
-                            val result = withContext(Dispatchers.IO) {
-                                healthChecker.showAssistantSession()
-                            }
-                            message = result.fold({ it }, { "測試失敗：${it.message}" })
-                            busy = false
-                        }
-                    }
+                    enabled = !busy && !diagnosticBusy,
+                    onClick = { launchDefaultAssistant() }
                 ) {
                     Text("測試喚起 Assistant")
                 }
 
                 OutlinedButton(
                     modifier = Modifier.weight(1f),
-                    enabled = shizukuGranted && !busy && !diagnosticBusy,
-                    onClick = {
-                        busy = true
-                        message = null
-                        shell.ensureConnected()
-                        scope.launch {
-                            delay(300)
-                            val restart = withContext(Dispatchers.IO) {
-                                healthChecker.restartHotwordDetection()
-                            }
-                            if (restart.isSuccess) {
-                                delay(1200)
-                                val recheck = withContext(Dispatchers.IO) {
-                                    healthChecker.collect()
-                                }
-                                health = recheck.getOrNull() ?: health
-                            }
-                            message = restart.fold({ it }, { "重啟失敗：${it.message}" })
-                            busy = false
-                        }
-                    }
+                    enabled = !busy && !diagnosticBusy,
+                    onClick = { openGoogleHotwordSettings() }
                 ) {
-                    Text("重啟 Hotword")
+                    Text("Voice Match 設定")
                 }
+            }
+
+            OutlinedButton(
+                modifier = Modifier.fillMaxWidth(),
+                enabled = shizukuGranted && !busy && !diagnosticBusy,
+                onClick = {
+                    busy = true
+                    message = null
+                    shell.ensureConnected()
+                    scope.launch {
+                        delay(300)
+                        val restart = withContext(Dispatchers.IO) {
+                            healthChecker.restartHotwordDetection()
+                        }
+                        if (restart.isSuccess) {
+                            delay(900)
+                            val recheck = withContext(Dispatchers.IO) {
+                                healthChecker.collect()
+                            }
+                            health = recheck.getOrNull() ?: health
+                        }
+                        message = restart.fold({ it }, { "重啟失敗：${it.message}" })
+                        busy = false
+                    }
+                }
+            ) {
+                Text("重啟 Hotword 並驗證")
             }
 
             health?.let { h ->
@@ -310,7 +342,7 @@ private fun GlobalizerApp(shell: ShizukuShell) {
             }
 
             Text(
-                "v0.2.1 原則：先診斷、後修改。可安全測試 Assistant session 與重新啟動 Hotword Detection Service；不 Root、不改 /system、不碰 Verified Boot；Hey Google / hotword 本版只判斷軟體層條件，不會直接改寫 OEM hotword 設定。",
+                "v0.2.2 原則：先診斷、後修改。Assistant 測試改用一般 ACTION_ASSIST；Hotword restart 會在執行後重新驗證 detector connection；不 Root、不改 /system、不碰 Verified Boot；Hey Google / hotword 本版只判斷軟體層條件，不會直接改寫 OEM hotword 設定。",
                 style = MaterialTheme.typography.bodySmall
             )
             Spacer(Modifier.height(24.dp))
