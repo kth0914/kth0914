@@ -31,6 +31,18 @@ class GoogleHealth(private val shell: ShizukuShell) {
             return out
         }
 
+        fun bucketDescription(value: String): String {
+            val number = value.trim().toIntOrNull()
+            return when {
+                number == null -> value.ifBlank { "未知" }
+                number <= 10 -> "$number（≤10，沒有 App Standby 節流）"
+                number <= 20 -> "$number（Working Set 級別）"
+                number <= 30 -> "$number（Frequent 級別）"
+                number <= 40 -> "$number（Rare 級別）"
+                else -> "$number（高限制級別）"
+            }
+        }
+
         val gmsPath = run("GMS package", "pm path com.google.android.gms")
         val gmsEnabled = gmsPath.contains("package:")
         items += GoogleDiagnosticItem(
@@ -60,7 +72,7 @@ class GoogleHealth(private val shell: ShizukuShell) {
         items += GoogleDiagnosticItem(
             "FCM 推播基礎：Standby Bucket",
             if (gmsBucket.isNotBlank()) Status.OK else Status.UNKNOWN,
-            if (gmsBucket.isBlank()) "系統沒有回傳 bucket" else "系統回傳：$gmsBucket"
+            "系統回傳：${bucketDescription(gmsBucket)}"
         )
 
         val gmsOps = run(
@@ -72,7 +84,7 @@ class GoogleHealth(private val shell: ShizukuShell) {
         items += GoogleDiagnosticItem(
             "FCM 推播基礎：背景執行",
             if (gmsOpsBlocked) Status.WARNING else Status.OK,
-            if (gmsOpsBlocked) "GMS 的背景 AppOps 出現限制" else "沒有看到明確的背景 deny / ignore"
+            if (gmsOpsBlocked) "GMS 的背景 AppOps 出現限制" else "沒有看到背景 deny / ignore，預設為 allow"
         )
 
         val googleAppPath = run(
@@ -114,8 +126,8 @@ class GoogleHealth(private val shell: ShizukuShell) {
             items += GoogleDiagnosticItem(
                 "Gmail 背景狀態",
                 if (blocked) Status.WARNING else Status.OK,
-                "Standby bucket：${gmailBucket.ifBlank { "未知" }}；" +
-                    if (blocked) "背景 AppOps 有限制" else "沒有看到明確背景限制"
+                "Standby：${bucketDescription(gmailBucket)}；" +
+                    if (blocked) "背景 AppOps 有限制" else "背景 AppOps 沒有看到限制"
             )
         }
 
@@ -154,24 +166,27 @@ class GoogleHealth(private val shell: ShizukuShell) {
         )
 
         val googleComponent = "com.google.android.googlequicksearchbox"
-        val assistantIsGoogle = assistant.contains(googleComponent) || assistantRole.contains(googleComponent)
+        val assistantIsGoogle =
+            assistant.contains(googleComponent) && assistantRole.contains(googleComponent)
+        val voiceIsGoogle = voiceInteraction.contains(googleComponent)
+
         items += GoogleDiagnosticItem(
-            "預設助理",
-            if (assistantIsGoogle) Status.OK else Status.WARNING,
-            buildString {
-                append("secure assistant：").append(assistant.ifBlank { "null/空" })
-                append("\nROLE_ASSISTANT：").append(assistantRole.ifBlank { "空" })
+            "Google Assistant 框架",
+            if (assistantIsGoogle && voiceIsGoogle) Status.OK else Status.WARNING,
+            if (assistantIsGoogle && voiceIsGoogle) {
+                "ASSISTANT、ROLE_ASSISTANT、VoiceInteractionService 都已由 Google 接管"
+            } else {
+                "Assistant / Role / VoiceInteraction 尚未全部指向 Google"
             }
         )
 
-        val voiceIsGoogle = voiceInteraction.contains(googleComponent)
         items += GoogleDiagnosticItem(
-            "VoiceInteractionService",
-            if (voiceIsGoogle) Status.OK else Status.WARNING,
-            if (voiceIsGoogle) {
-                "目前指向 Google VoiceInteractionService"
+            "系統預設 SpeechRecognizer",
+            Status.UNKNOWN,
+            if (voiceRecognition.contains("com.vivo", true)) {
+                "目前是 vivo：$voiceRecognition。這是一般語音辨識的預設服務，與 VoiceInteraction hotword 並非同一層；本版不自動修改。"
             } else {
-                "目前不是 Google VoiceInteractionService：${voiceInteraction.ifBlank { "null/空" }}"
+                "目前為：${voiceRecognition.ifBlank { "null/空" }}"
             }
         )
 
@@ -183,22 +198,93 @@ class GoogleHealth(private val shell: ShizukuShell) {
         items += GoogleDiagnosticItem(
             "Google VoiceInteraction 元件",
             if (googleVisComponent.isNotBlank()) Status.OK else Status.WARNING,
-            if (googleVisComponent.isNotBlank()) "Google 的 GsaVoiceInteractionService 元件存在" else "未在 package dump 中找到 Google VoiceInteraction 元件"
+            if (googleVisComponent.isNotBlank()) {
+                "GsaVoiceInteractionService 存在"
+            } else {
+                "未在 package dump 中找到 GsaVoiceInteractionService"
+            }
         )
 
         val voiceDump = run(
             "voiceinteraction selected",
             "dumpsys voiceinteraction 2>/dev/null | " +
-                "grep -E 'mCur|Interactor|VoiceInteraction|com\\.google|com\\.vivo|jovi' | head -n 80 || true"
+                "grep -E 'mCur|Interactor|VoiceInteraction|Recognition service|Hotword detection service|mBound|com\\\\.google|com\\\\.vivo|jovi' | head -n 120 || true"
+        )
+
+        val googleHotwordService =
+            voiceDump.contains("GsaHotwordDetectionService") && voiceDump.contains("mBound=true")
+        items += GoogleDiagnosticItem(
+            "Google Hotword Detection Service",
+            if (googleHotwordService) Status.OK else Status.WARNING,
+            if (googleHotwordService) {
+                "Google GsaHotwordDetectionService 已綁定（mBound=true）"
+            } else {
+                "尚未看到 Google hotword detection service 處於已綁定狀態"
+            }
+        )
+
+        val hotwordPermissions = run(
+            "Google hotword permissions",
+            "dumpsys package com.google.android.googlequicksearchbox 2>/dev/null | " +
+                "grep -E 'RECORD_AUDIO|CAPTURE_AUDIO_HOTWORD|MANAGE_VOICE_KEYPHRASES|SOUND_TRIGGER_RUN_IN_BATTERY_SAVER|HOTWORD' | head -n 160 || true"
+        )
+        val recordAudioGranted =
+            hotwordPermissions.contains("RECORD_AUDIO") && hotwordPermissions.contains("granted=true")
+        items += GoogleDiagnosticItem(
+            "Google App 麥克風 / Hotword 權限",
+            if (recordAudioGranted) Status.OK else Status.WARNING,
+            if (recordAudioGranted) {
+                "Google App 的 package dump 中可看到 RECORD_AUDIO 已授權；其餘 hotword 權限請看診斷報告。"
+            } else {
+                "未能從 package dump 明確確認 RECORD_AUDIO granted=true；請查看診斷報告中的權限行。"
+            }
+        )
+
+        val hotwordState = run(
+            "Hotword detector state",
+            "dumpsys voiceinteraction 2>/dev/null | " +
+                "grep -iE 'hotword|keyphrase|sound.?trigger|detector|always.?on|dsp|software|enroll|model|mBound' | head -n 260 || true"
+        )
+
+        val soundTriggerServices = run(
+            "SoundTrigger services",
+            "service list 2>/dev/null | grep -iE 'soundtrigger|voiceinteraction' || true"
+        )
+
+        val soundTriggerDump = run(
+            "SoundTrigger middleware",
+            "(dumpsys soundtrigger_middleware 2>&1 || true; dumpsys soundtrigger 2>&1 || true) | head -n 260"
+        )
+
+        val hasDspSignal =
+            hotwordState.contains("dsp", true) ||
+                soundTriggerDump.contains("module", true) ||
+                soundTriggerDump.contains("soundtrigger", true)
+
+        items += GoogleDiagnosticItem(
+            "SoundTrigger / DSP 層",
+            if (hasDspSignal) Status.OK else Status.UNKNOWN,
+            if (hasDspSignal) {
+                "系統有回傳 SoundTrigger / DSP 相關資訊；是否已載入 Google keyphrase model 仍需看原始診斷內容。"
+            } else {
+                "沒有取得足夠的 SoundTrigger / DSP 資訊；這一層可能由 vivo HAL 隱藏或未提供給 shell dump。"
+            }
         )
 
         items += GoogleDiagnosticItem(
-            "Hey Google / OK Google",
-            Status.WARNING,
-            if (voiceIsGoogle && googleVisComponent.isNotBlank()) {
-                "軟體層已具備 Google VoiceInteraction 基礎，但這仍不能證明 OEM DSP / hotword provider 已允許常駐語音喚醒；需再看實機行為。"
-            } else {
-                "目前連 VoiceInteraction 基礎都還沒有完全指向 Google，因此先不建議直接改 hotword。"
+            "Hey Google / OK Google 判斷",
+            when {
+                !assistantIsGoogle || !voiceIsGoogle -> Status.WARNING
+                !googleHotwordService -> Status.WARNING
+                else -> Status.UNKNOWN
+            },
+            when {
+                !assistantIsGoogle || !voiceIsGoogle ->
+                    "Google 尚未完全接管 Assistant framework。"
+                !googleHotwordService ->
+                    "Google Assistant 已接管，但 HotwordDetectionService 尚未正常綁定。"
+                else ->
+                    "Android framework 與 Google hotword service 都已就緒。若實際仍無法用 Hey Google 喚醒，嫌疑集中在 keyphrase enrollment、SoundTrigger/DSP 或 vivo vendor hotword policy，而不是預設助理設定。"
             }
         )
 
@@ -208,7 +294,23 @@ class GoogleHealth(private val shell: ShizukuShell) {
             .append("voice_recognition_service=").append(voiceRecognition).append('\n')
             .append("assistant_role=").append(assistantRole).append('\n')
             .append("voiceinteraction_filtered=").append(voiceDump).append('\n')
+            .append("hotword_state_filtered=").append(hotwordState).append('\n')
+            .append("soundtrigger_services=").append(soundTriggerServices).append('\n')
 
         GoogleHealthReport(items, raw.toString().trim())
+    }
+
+    fun showAssistantSession(): Result<String> = runCatching {
+        require(shell.isConnected()) { "Shizuku shell 尚未連線" }
+        val result = shell.exec("cmd voiceinteraction show")
+        check(result.ok) { "系統喚起 Assistant 失敗：\n${result.diagnostic()}" }
+        "已要求 Android VoiceInteractionManager 顯示目前的預設 Assistant session。"
+    }
+
+    fun restartHotwordDetection(): Result<String> = runCatching {
+        require(shell.isConnected()) { "Shizuku shell 尚未連線" }
+        val result = shell.exec("cmd voiceinteraction restart-detection")
+        check(result.ok) { "重啟 Hotword detection 失敗：\n${result.diagnostic()}" }
+        "已要求 Android VoiceInteractionManager 重新啟動 Hotword Detection Service。這不會修改永久設定。"
     }
 }
