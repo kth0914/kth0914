@@ -14,6 +14,7 @@ class SnapshotStore(context: Context) {
                 put("id", it.tweakId)
                 put("old", it.oldValue)
                 put("ts", it.timestamp)
+                put("mode", it.appliedMode)
             })
         }
         prefs.edit().putString("latest", arr.toString()).apply()
@@ -25,7 +26,14 @@ class SnapshotStore(context: Context) {
         return buildList {
             for (i in 0 until arr.length()) {
                 val obj = arr.getJSONObject(i)
-                add(SnapshotEntry(obj.getString("id"), obj.optString("old"), obj.optLong("ts")))
+                add(
+                    SnapshotEntry(
+                        tweakId = obj.getString("id"),
+                        oldValue = obj.optString("old"),
+                        timestamp = obj.optLong("ts"),
+                        appliedMode = obj.optString("mode", "primary")
+                    )
+                )
             }
         }
     }
