@@ -31,6 +31,7 @@ data class Tweak(
     val applyCommand: String,
     val restoreTemplate: String,
     val restorePolicy: RestorePolicy = RestorePolicy.ALWAYS,
+    val fallbackReadCommand: String? = null,
     val fallbackApplyCommand: String? = null,
     val fallbackRestoreTemplate: String? = null,
     val fallbackLabel: String = "替代模式"
