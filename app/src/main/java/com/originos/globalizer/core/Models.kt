@@ -30,11 +30,15 @@ data class Tweak(
     val readCommand: String,
     val applyCommand: String,
     val restoreTemplate: String,
-    val restorePolicy: RestorePolicy = RestorePolicy.ALWAYS
+    val restorePolicy: RestorePolicy = RestorePolicy.ALWAYS,
+    val fallbackApplyCommand: String? = null,
+    val fallbackRestoreTemplate: String? = null,
+    val fallbackLabel: String = "替代模式"
 )
 
 data class SnapshotEntry(
     val tweakId: String,
     val oldValue: String,
-    val timestamp: Long
+    val timestamp: Long,
+    val appliedMode: String = "primary"
 )
