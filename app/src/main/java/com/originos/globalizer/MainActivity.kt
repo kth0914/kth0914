@@ -128,7 +128,7 @@ private fun GlobalizerApp(shell: ShizukuShell) {
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("OriginOS Globalizer v0.2.2") }) }
+        topBar = { TopAppBar(title = { Text("OriginOS Globalizer v0.2.3") }) }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -342,7 +342,7 @@ private fun GlobalizerApp(shell: ShizukuShell) {
             }
 
             Text(
-                "v0.2.2 原則：先診斷、後修改。Assistant 測試改用一般 ACTION_ASSIST；Hotword restart 會在執行後重新驗證 detector connection；不 Root、不改 /system、不碰 Verified Boot；Hey Google / hotword 本版只判斷軟體層條件，不會直接改寫 OEM hotword 設定。",
+                "v0.2.3 原則：先診斷、後修改。若 Hotword 核心權限被 ROM 拒絕，會直接判定 no-root always-on Hey Google 不可行；Assistant 測試仍使用一般 ACTION_ASSIST；不 Root、不改 /system、不碰 Verified Boot；Hey Google / hotword 本版只判斷軟體層條件，不會直接改寫 OEM hotword 設定。",
                 style = MaterialTheme.typography.bodySmall
             )
             Spacer(Modifier.height(24.dp))
