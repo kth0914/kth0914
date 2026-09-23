@@ -14,11 +14,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.originos.globalizer.core.*
 import com.originos.globalizer.shizuku.ShizukuShell
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import rikka.shizuku.Shizuku
@@ -45,16 +48,20 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun GlobalizerApp(shell: ShizukuShell) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    val clipboard = LocalClipboardManager.current
     val inspector = remember { GoogleInspector(context) }
     val snapshotStore = remember { SnapshotStore(context) }
     val engine = remember { TweakEngine(shell, snapshotStore) }
+    val healthChecker = remember { GoogleHealth(shell) }
     val scope = rememberCoroutineScope()
 
     var report by remember { mutableStateOf(inspector.inspect()) }
+    var health by remember { mutableStateOf<GoogleHealthReport?>(null) }
     var shizukuAlive by remember { mutableStateOf(shell.binderAlive()) }
     var shizukuGranted by remember { mutableStateOf(shell.permissionGranted()) }
     var shellConnected by remember { mutableStateOf(shell.isConnected()) }
     var busy by remember { mutableStateOf(false) }
+    var diagnosticBusy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
 
     DisposableEffect(Unit) {
@@ -85,7 +92,7 @@ private fun GlobalizerApp(shell: ShizukuShell) {
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("OriginOS Globalizer v0.1.3") }) }
+        topBar = { TopAppBar(title = { Text("OriginOS Globalizer v0.2.0") }) }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -94,7 +101,11 @@ private fun GlobalizerApp(shell: ShizukuShell) {
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Text("${report.manufacturer} ${report.model}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(
+                "${report.manufacturer} ${report.model}",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
             Text("${report.androidVersion} · ${report.originOsVersion}")
 
             Card {
@@ -113,7 +124,10 @@ private fun GlobalizerApp(shell: ShizukuShell) {
                     Text("Shell：${if (shellConnected) "已連線" else "未連線"}")
                     shell.shellUid()?.let { Text("Shell UID：$it") }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { shell.requestPermission() }, enabled = shizukuAlive && !shizukuGranted) {
+                        Button(
+                            onClick = { shell.requestPermission() },
+                            enabled = shizukuAlive && !shizukuGranted
+                        ) {
                             Text("授權")
                         }
                         OutlinedButton(onClick = { refresh() }) { Text("重新檢查") }
@@ -121,10 +135,65 @@ private fun GlobalizerApp(shell: ShizukuShell) {
                 }
             }
 
+            Text(
+                "Google 深度診斷",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                "檢查 FCM 推播基礎、GMS/Gmail 背景狀態、Assistant Role、VoiceInteractionService 與 Hey Google 軟體層條件。",
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            Button(
+                modifier = Modifier.fillMaxWidth(),
+                enabled = shizukuGranted && !diagnosticBusy,
+                onClick = {
+                    diagnosticBusy = true
+                    message = null
+                    shell.ensureConnected()
+                    scope.launch {
+                        delay(500)
+                        shellConnected = shell.isConnected()
+                        val result = if (shellConnected) {
+                            withContext(Dispatchers.IO) { healthChecker.collect() }
+                        } else {
+                            Result.failure(IllegalStateException("Shizuku 已授權，但 Shell User Service 尚未連線；請按一次重新檢查後再試。"))
+                        }
+                        health = result.getOrNull()
+                        message = result.exceptionOrNull()?.message?.let { "診斷失敗：$it" }
+                        diagnosticBusy = false
+                    }
+                }
+            ) {
+                Text(if (diagnosticBusy) "診斷中…" else "執行 Google 深度診斷")
+            }
+
+            health?.let { h ->
+                Card {
+                    Column(
+                        Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        h.items.forEach { GoogleDiagnosticRow(it) }
+                    }
+                }
+
+                OutlinedButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        clipboard.setText(AnnotatedString(h.rawReport))
+                        message = "已複製診斷報告。報告刻意不收集帳號、電話、IMEI、序號、Wi‑Fi 或位置資料。"
+                    }
+                ) {
+                    Text("複製診斷報告")
+                }
+            }
+
             Text("Google 服務", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             report.checks.forEach { ServiceRow(it) }
 
-            Text("🌏 海外模式", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("🌏 Google 海外模式", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             TweakCatalog.overseasMode.forEach { TweakRow(it) }
 
             Button(
@@ -135,13 +204,16 @@ private fun GlobalizerApp(shell: ShizukuShell) {
                     message = null
                     shell.ensureConnected()
                     scope.launch {
-                        val result = withContext(Dispatchers.IO) { engine.apply(TweakCatalog.overseasMode) }
+                        delay(300)
+                        val result = withContext(Dispatchers.IO) {
+                            engine.apply(TweakCatalog.overseasMode)
+                        }
                         message = result.fold({ it }, { "失敗：${it.message}" })
                         busy = false
                         refresh()
                     }
                 }
-            ) { Text(if (busy) "處理中…" else "啟用海外模式") }
+            ) { Text(if (busy) "處理中…" else "套用 Google 海外模式") }
 
             OutlinedButton(
                 modifier = Modifier.fillMaxWidth(),
@@ -149,7 +221,10 @@ private fun GlobalizerApp(shell: ShizukuShell) {
                 onClick = {
                     busy = true
                     scope.launch {
-                        val result = withContext(Dispatchers.IO) { engine.restore(TweakCatalog.overseasMode + TweakCatalog.debloat) }
+                        delay(300)
+                        val result = withContext(Dispatchers.IO) {
+                            engine.restore(TweakCatalog.overseasMode + TweakCatalog.debloat)
+                        }
                         message = result.fold({ it }, { "失敗：${it.message}" })
                         busy = false
                         refresh()
@@ -166,7 +241,10 @@ private fun GlobalizerApp(shell: ShizukuShell) {
                     onClick = {
                         busy = true
                         scope.launch {
-                            val result = withContext(Dispatchers.IO) { engine.apply(listOf(tweak)) }
+                            delay(300)
+                            val result = withContext(Dispatchers.IO) {
+                                engine.apply(listOf(tweak))
+                            }
                             message = result.fold({ it }, { "失敗：${it.message}" })
                             busy = false
                             refresh()
@@ -180,7 +258,7 @@ private fun GlobalizerApp(shell: ShizukuShell) {
             }
 
             Text(
-                "v0.1.3 原則：不 Root、不改 /system、不碰 Verified Boot。vivo 對部分自家套件採 root-only 保護時，本 App 只做可逆背景限制，不宣稱完整停用。Hey Google / hotword 尚不在本版強改。",
+                "v0.2.0 原則：先診斷、後修改。不 Root、不改 /system、不碰 Verified Boot；Hey Google / hotword 本版只判斷軟體層條件，不會直接改寫 OEM hotword 設定。",
                 style = MaterialTheme.typography.bodySmall
             )
             Spacer(Modifier.height(24.dp))
@@ -201,6 +279,20 @@ private fun ServiceRow(check: ServiceCheck) {
         leadingContent = { Icon(icon, contentDescription = null) }
     )
     HorizontalDivider()
+}
+
+@Composable
+private fun GoogleDiagnosticRow(item: GoogleDiagnosticItem) {
+    val icon = when (item.status) {
+        Status.OK -> Icons.Default.CheckCircle
+        Status.WARNING -> Icons.Default.Warning
+        Status.MISSING, Status.UNKNOWN -> Icons.Default.Error
+    }
+    ListItem(
+        headlineContent = { Text(item.title, fontWeight = FontWeight.SemiBold) },
+        supportingContent = { Text(item.detail) },
+        leadingContent = { Icon(icon, contentDescription = null) }
+    )
 }
 
 @Composable
