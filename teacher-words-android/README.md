@@ -10,4 +10,4 @@
 
 APK 由 GitHub Actions 自動編譯。
 
-Build: 2
+Build: 3
