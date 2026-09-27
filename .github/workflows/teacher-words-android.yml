@@ -56,3 +56,10 @@ jobs:
         with:
           name: uber-apk-signer
           path: uber-apk-signer.jar
+
+      - name: Download apktool
+        run: wget -q https://github.com/iBotPeaches/Apktool/releases/download/v2.11.1/apktool_2.11.1.jar -O apktool.jar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apktool
+          path: apktool.jar
