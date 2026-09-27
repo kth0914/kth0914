@@ -38,11 +38,14 @@ jobs:
           python3 patch_v13.py app/src/main/assets/index.html
           grep -q "ttsSpeak" app/src/main/assets/index.html
           grep -q "電子書載入中" app/src/main/assets/index.html
-          echo "ebook bytes: $(wc -c < app/src/main/assets/index.html)"
-      - name: Build unsigned release APK
+      - name: Build signed debug APK
         working-directory: teacher-words-android
-        run: gradle --no-daemon assembleRelease
+        run: gradle --no-daemon assembleDebug
+      - name: Verify APK signatures
+        working-directory: teacher-words-android
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: teacher-words-v1.3-unsigned
-          path: teacher-words-android/app/build/outputs/apk/release/app-release-unsigned.apk
+          name: teacher-words-v1.3-signed
+          path: teacher-words-android/app/build/outputs/apk/debug/app-debug.apk
