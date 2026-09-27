@@ -18,14 +18,16 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
-      - name: Show Android SDK
-        run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          sdkmanager --list_installed | head -80 || true
       - name: Ensure Android 35
+        shell: bash
         run: |
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -1)"
+          fi
+          echo "Using sdkmanager: $SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
       - name: Restore ebook asset
         working-directory: teacher-words-android
         run: |
@@ -34,6 +36,7 @@ jobs:
           base64 -d ebook.xz.b64 > ebook.xz
           xz -dc ebook.xz > app/src/main/assets/index.html
           test -s app/src/main/assets/index.html
+          echo "ebook bytes: $(wc -c < app/src/main/assets/index.html)"
       - name: Build APK
         working-directory: teacher-words-android
         run: gradle --no-daemon assembleDebug
