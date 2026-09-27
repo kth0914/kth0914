@@ -25,22 +25,24 @@ jobs:
           if [ ! -x "$SDKMANAGER" ]; then
             SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -1)"
           fi
-          echo "Using sdkmanager: $SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
-      - name: Restore ebook asset
+      - name: Restore and patch ebook asset
         working-directory: teacher-words-android
         run: |
           mkdir -p app/src/main/assets
           cat asset_parts/part_* > ebook.xz.b64
           base64 -d ebook.xz.b64 > ebook.xz
           xz -dc ebook.xz > app/src/main/assets/index.html
-          test -s app/src/main/assets/index.html
+          base64 -d patch_v13.py.gz.b64 | gzip -dc > patch_v13.py
+          python3 patch_v13.py app/src/main/assets/index.html
+          grep -q "ttsSpeak" app/src/main/assets/index.html
+          grep -q "電子書載入中" app/src/main/assets/index.html
           echo "ebook bytes: $(wc -c < app/src/main/assets/index.html)"
-      - name: Build APK
+      - name: Build unsigned release APK
         working-directory: teacher-words-android
-        run: gradle --no-daemon assembleDebug
+        run: gradle --no-daemon assembleRelease
       - uses: actions/upload-artifact@v4
         with:
-          name: teacher-words-apk
-          path: teacher-words-android/app/build/outputs/apk/debug/app-debug.apk
+          name: teacher-words-v1.3-unsigned
+          path: teacher-words-android/app/build/outputs/apk/release/app-release-unsigned.apk
