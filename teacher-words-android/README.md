@@ -9,3 +9,5 @@
 - 內建 WebView，不需網路權限
 
 APK 由 GitHub Actions 自動編譯。
+
+Build: 2
