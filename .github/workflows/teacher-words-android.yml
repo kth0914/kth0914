@@ -1,0 +1,38 @@
+name: Build Teacher Words Android APK
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'teacher-words-android/**'
+      - '.github/workflows/teacher-words-android.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: yes | sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Restore ebook asset
+        working-directory: teacher-words-android
+        run: |
+          mkdir -p app/src/main/assets
+          cat asset_parts/part_* > ebook.xz.b64
+          base64 -d ebook.xz.b64 > ebook.xz
+          xz -dc ebook.xz > app/src/main/assets/index.html
+          test -s app/src/main/assets/index.html
+      - name: Build APK
+        working-directory: teacher-words-android
+        run: gradle --no-daemon assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: teacher-words-apk
+          path: teacher-words-android/app/build/outputs/apk/debug/app-debug.apk
